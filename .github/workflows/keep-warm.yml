@@ -5,10 +5,12 @@ name: keep-warm
 # in runner minutes, so each run stays alive and pings in a loop from the inside.
 on:
   schedule:
-    # 08:00-13:50 CDMX == 14:00-19:50 UTC
-    - cron: '0 14 * * *'
-    # 14:00-17:50 CDMX == 20:00-23:50 UTC
-    - cron: '0 20 * * *'
+    # Window 05:00-23:00 CDMX == 11:00-05:00 UTC, in three 5h55 jobs so each one fits
+    # under GitHub's 6 h per-job ceiling. The 5 min gap between jobs is well inside
+    # Render's 15 min idle timer, so the CMS never sleeps mid-window.
+    - cron: '0 11 * * *'
+    - cron: '0 17 * * *'
+    - cron: '0 23 * * *'
   workflow_dispatch:
     inputs:
       minutes:
@@ -33,8 +35,9 @@ jobs:
         run: |
           set -u
           case "$SCHEDULE" in
-            '0 14 * * *') MINUTES=350 ;;
-            '0 20 * * *') MINUTES=230 ;;
+            '0 11 * * *') MINUTES=355 ;;
+            '0 17 * * *') MINUTES=355 ;;
+            '0 23 * * *') MINUTES=355 ;;
             *) MINUTES="${INPUT_MINUTES:-0}" ;;
           esac
           ping() {
