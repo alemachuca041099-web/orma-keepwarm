@@ -1,0 +1,54 @@
+name: keep-warm
+
+# Render Free sleeps each service after 15 min without inbound traffic and needs ~80 s to
+# come back. A plain */5 cron is both imprecise (GitHub delays scheduled runs) and expensive
+# in runner minutes, so each run stays alive and pings in a loop from the inside.
+on:
+  schedule:
+    # 08:00-13:50 CDMX == 14:00-19:50 UTC
+    - cron: '0 14 * * *'
+    # 14:00-17:50 CDMX == 20:00-23:50 UTC
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: 'Minutes the loop stays alive (0 = single test ping)'
+        required: false
+        default: '0'
+
+concurrency:
+  group: keep-warm
+  cancel-in-progress: false
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Ping CMS and gateway every 5 minutes
+        env:
+          CMS: https://orma-cms-staging.onrender.com/_health
+          GATEWAY: https://orma-read-gateway-staging.onrender.com/healthz
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_MINUTES: ${{ inputs.minutes }}
+        run: |
+          set -u
+          case "$SCHEDULE" in
+            '0 14 * * *') MINUTES=350 ;;
+            '0 20 * * *') MINUTES=230 ;;
+            *) MINUTES="${INPUT_MINUTES:-0}" ;;
+          esac
+          ping() {
+            result=$(curl -sS -o /dev/null -w '%{http_code} %{time_total}s' --max-time 120 "$1" || echo 'error')
+            echo "$(date -u +%H:%M:%SZ) $2 -> $result"
+          }
+          echo "Loop budget: ${MINUTES} min"
+          ping "$CMS" cms
+          ping "$GATEWAY" gateway
+          if [ "$MINUTES" -le 0 ]; then exit 0; fi
+          END=$(( $(date +%s) + MINUTES * 60 ))
+          while [ "$(date +%s)" -lt "$END" ]; do
+            sleep 300
+            ping "$CMS" cms
+            ping "$GATEWAY" gateway
+          done
