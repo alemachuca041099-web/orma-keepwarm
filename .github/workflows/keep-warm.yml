@@ -25,10 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
-      - name: Ping CMS and gateway every 5 minutes
+      - name: Ping CMS every 5 minutes
         env:
           CMS: https://orma-cms-staging.onrender.com/_health
-          GATEWAY: https://orma-read-gateway-staging.onrender.com/healthz
           SCHEDULE: ${{ github.event.schedule }}
           INPUT_MINUTES: ${{ inputs.minutes }}
         run: |
@@ -44,11 +43,9 @@ jobs:
           }
           echo "Loop budget: ${MINUTES} min"
           ping "$CMS" cms
-          ping "$GATEWAY" gateway
           if [ "$MINUTES" -le 0 ]; then exit 0; fi
           END=$(( $(date +%s) + MINUTES * 60 ))
           while [ "$(date +%s)" -lt "$END" ]; do
             sleep 300
             ping "$CMS" cms
-            ping "$GATEWAY" gateway
           done
